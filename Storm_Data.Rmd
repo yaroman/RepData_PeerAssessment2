@@ -1,0 +1,124 @@
+---
+title: "Reproducible Research - Peer Assessment 2"
+output: html_document
+---
+
+
+## Synopsis
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+
+Questions to be answered:
+
+1. Across the United States, which types of events are most harmful with respect to population health?
+2. Across the United States, which types of events have the greatest economic consequences?
+
+## Raw Data Loading and Processing
+
+The file can be downloaded using the commented out line below. As a result of further transformation steps the source data frame gets a new "year" column and the "BGN_DATE" is converted into dates. 
+```{r, cache=TRUE}
+# Download file
+#download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2","repdata_data_FStormData.csv.bz2")
+
+# Read file
+data <- read.csv(bzfile("repdata_data_FStormData.csv.bz2"))
+# Create a new data frame with only few columns to review fatalities, injuries, property and crop damages
+df <- data.frame(data[,c("BGN_DATE","EVTYPE","FATALITIES","INJURIES","PROPDMG","CROPDMG")])
+# Add a new column
+df$date <- as.Date(df$BGN_DATE, format = "%m/%d/%Y")
+df$year <- as.numeric(format(df$date,"%Y"))
+```
+
+## Data review and aggregation
+Looking at the histogram it is obvious that the amount of data available for researches grows over the years. In the earlier years fewer events were recorded. We will be focusing on four types of events: health related such as fatal or injuries, and economic such as property and crop damages. The next steps produce aggregated data. Only top 10 causes are selected for each type. 
+
+
+```{r}
+
+# Load libraries
+library(plyr)
+
+hist(df$year, breaks = 30, col="blue", main="Data collection growth in U.S. from 1995 to 2011", xlab="Year")
+
+# Aggregate and select top 10
+# ----- Health and injuries-----
+df.fatalities.bytype <- aggregate(df[, 'FATALITIES'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
+df.injuries.bytype <- aggregate(df[, 'INJURIES'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
+names(df.fatalities.bytype) <- c("EVTYPE","HEALTH")
+names(df.injuries.bytype) <- c("EVTYPE","HEALTH")
+df.fatalities.bytype.10 <- head(arrange(df.fatalities.bytype[which(df.fatalities.bytype$HEALTH >0),], desc(HEALTH)),10)
+df.injuries.bytype.10   <- head(arrange(df.injuries.bytype[which(df.injuries.bytype$HEALTH >0),], desc(HEALTH)),10) 
+
+# ---- Property and crop damage
+df.property.bytype <- aggregate(df[, 'PROPDMG'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
+df.crop.bytype <- aggregate(df[, 'CROPDMG'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
+names(df.property.bytype) <- c("EVTYPE","HEALTH")
+names(df.crop.bytype) <- c("EVTYPE","HEALTH")
+df.property.bytype.10 <- head(arrange(df.property.bytype[which(df.property.bytype$HEALTH >0),], desc(HEALTH)),10) 
+df.crop.bytype.10     <- head(arrange(df.crop.bytype[which(df.crop.bytype$HEALTH >0),], desc(HEALTH)),10) 
+
+```
+
+## Results
+
+```{r, fig.width=10, fig.height=6}
+# Load libraries
+library(ggplot2)
+library(gridExtra) 
+
+### -- Reorder data frames for better visual effect
+df.fatalities.bytype.10 <- transform(df.fatalities.bytype.10, EVTYPE = reorder(EVTYPE, order(HEALTH, decreasing = TRUE)))
+df.injuries.bytype.10 <- transform(df.injuries.bytype.10, EVTYPE = reorder(EVTYPE, order(HEALTH, decreasing = TRUE)))
+
+df.property.bytype.10 <- transform(df.property.bytype.10, EVTYPE = reorder(EVTYPE, order(HEALTH, decreasing = TRUE)))
+df.crop.bytype.10 <- transform(df.crop.bytype.10, EVTYPE = reorder(EVTYPE, order(HEALTH, decreasing = TRUE)))
+
+###-------Build barplots-------
+# Fatalities and injuries by event
+fp <- ggplot(data = df.fatalities.bytype.10, aes(x=EVTYPE, y=HEALTH), geom = "bar", binwidth = 1, colour="blue") + 
+        scale_y_continuous("Fatalities") + 
+        geom_bar(colour="blue", stat="identity", fill="blue") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) + xlab("Weather Type") + 
+        ggtitle("Top 10 causes of death\n in the U.S. from 1995 to 2011")
+ip <- ggplot(data = df.injuries.bytype.10, aes(x=EVTYPE, y=HEALTH), geom = "bar", binwidth = 1, colour="blue") + 
+        scale_y_continuous("Injuries") + 
+        geom_bar(colour="blue", stat="identity", fill="blue") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) + xlab("Weather Type") + 
+        ggtitle("Top 10 causes of injuries\n in the U.S. from 1995 to 2011")
+grid.arrange(fp, ip, ncol = 2, main="Fatalities and injuries by Event")
+
+###--------------
+# Property and crop damage by event
+pp <- ggplot(data = df.property.bytype.10, aes(x=EVTYPE, y=HEALTH), geom = "bar", binwidth = 1, colour="blue") + 
+        scale_y_continuous("Property Damage") + 
+        geom_bar(colour="blue", stat="identity", fill="blue") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) + xlab("Weather Type") + 
+        ggtitle("Top 10 causes of\nproperty damage\n in the U.S. from 1995 to 2011")
+cp <- ggplot(data = df.crop.bytype.10, aes(x=EVTYPE, y=HEALTH), geom = "bar", binwidth = 1, colour="blue") + 
+        scale_y_continuous("Crop Damage") + 
+        geom_bar(colour="blue", stat="identity", fill="blue") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) + xlab("Weather Type") + 
+        ggtitle("Top 10 causes of\ncrop damage\n in the U.S. from 1995 to 2011")
+grid.arrange(pp, cp, ncol = 2, main="Property and Crop Damage by Event")
+```
+
+## Conclusion
+
+1. As can be seen on the health related plots tornadoes have the most significant impact on the public health in terms of injuries and fatalities. Excessive heat is the 2nd leading cause of fatalities caused by severe weather events. Thunderstorm wind is the 2nd leading cause for injuries. 
+2. Tornadoes are also the leading cause of property damage followed by flash floods and storm surges. Leading cause of damage to crops are hail and flash floods.
+
+
+### Used libraries and System Info
+This is a list of loaded libraries
+
+1. library(ggplot2)
+1. library(plyr)
+1. library(gridExtra) 
+
+```{r}
+
+# Get system specs
+sessionInfo()
+```
+
