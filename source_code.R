@@ -24,9 +24,14 @@ str(data)
 
 View(head(data))
 
-df <- data.frame(data[,c("BGN_DATE","EVTYPE","FATALITIES","INJURIES","PROPDMG","CROPDMG")])
+# Read file
+data <- read.csv(bzfile("repdata_data_FStormData.csv.bz2"))
+# Create a new data frame with only few columns to review fatalities, injuries, property and crop damages
+df <- data.frame(data[,c("BGN_DATE","EVTYPE","FATALITIES","INJURIES","PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")])
+# Add a new column
 df$date <- as.Date(df$BGN_DATE, format = "%m/%d/%Y")
 df$year <- as.numeric(format(df$date,"%Y"))
+
 #df$HEALTH <- df$FATALITIES + df$INJURIES
 #df$ECONOMY <- df$PROPDMG + df$CROPDMG
 

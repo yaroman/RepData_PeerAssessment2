@@ -9,6 +9,10 @@ Storms and other severe weather events can cause both public health and economic
 
 This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
 
+The data for this assignment (Storm Data [47Mb]) comes in the form of a comma-separated-value file compressed via the bzip2 algorithm to reduce its size. 
+
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records.
+
 Questions to be answered:
 
 1. Across the United States, which types of events are most harmful with respect to population health?
@@ -17,6 +21,17 @@ Questions to be answered:
 ## Raw Data Loading and Processing
 
 The file can be downloaded using the commented out line below. As a result of further transformation steps the source data frame gets a new "year" column and the "BGN_DATE" is converted into dates. 
+
+Following columns are used in the data analysis:
+
+- EVTYPE as a measure of event type (e.g. tornado, flood, etc.)
+- FATALITIES as a measure of harm to human health
+- INJURIES as a measure of harm to human health
+- PROPDMG as a measure of property damage and hence economic damage in USD
+- PROPDMGEXP as a measure of magnitude of property damage (e.g. thousands, millions USD, etc.)
+- CROPDMG as a measure of crop damage and hence economic damage in USD
+- CROPDMGEXP as a measure of magnitude of crop damage (e.g. thousands, millions USD, etc)
+
 ```{r, cache=TRUE}
 # Download file
 #download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2","repdata_data_FStormData.csv.bz2")
@@ -24,14 +39,15 @@ The file can be downloaded using the commented out line below. As a result of fu
 # Read file
 data <- read.csv(bzfile("repdata_data_FStormData.csv.bz2"))
 # Create a new data frame with only few columns to review fatalities, injuries, property and crop damages
-df <- data.frame(data[,c("BGN_DATE","EVTYPE","FATALITIES","INJURIES","PROPDMG","CROPDMG")])
-# Add a new column
+df <- data.frame(data[,c("BGN_DATE","EVTYPE","FATALITIES","INJURIES","PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")])
+# Change column type
 df$date <- as.Date(df$BGN_DATE, format = "%m/%d/%Y")
+# Add a new column
 df$year <- as.numeric(format(df$date,"%Y"))
 ```
 
 ## Data review and aggregation
-Looking at the histogram it is obvious that the amount of data available for researches grows over the years. In the earlier years fewer events were recorded. We will be focusing on four types of events: health related such as fatal or injuries, and economic such as property and crop damages. The next steps produce aggregated data. Only top 10 causes are selected for each type. 
+Looking at the histogram it is obvious that the amount of data available for researches grows over the years. In earlier years fewer events were recorded. Because of that we will be limiting data range to years of 1980-2011. We will be focusing on four types of events: health related such as fatal or injuries, and economic related such as property and crop damages. The next steps will produce aggregated data. Only top 10 causes are selected for each type. 
 
 
 ```{r}
@@ -39,74 +55,98 @@ Looking at the histogram it is obvious that the amount of data available for res
 # Load libraries
 library(plyr)
 
-hist(df$year, breaks = 30, col="blue", main="Data collection growth in U.S. from 1995 to 2011", xlab="Year")
+hist(df$year, breaks = 30, col="blue", main="Data collection growth in U.S. from 1950 to 2011", xlab="Year")
 
-# Aggregate and select top 10
+df <- df[which(df$year >= 1980),]
+
+#-Fixing data values. Adding new columns with corrected values
+df$PROPDMGEXP <- as.character(df$PROPDMGEXP)
+df$PROPDMGEXP = gsub("\\-|\\+|\\?|h|H|0","0",df$PROPDMGEXP)
+df$PROPDMGEXP = gsub("k|K", "1000", df$PROPDMGEXP)
+df$PROPDMGEXP = gsub("m|M", "1000000", df$PROPDMGEXP)
+df$PROPDMGEXP = gsub("b|B", "1000000000", df$PROPDMGEXP)
+df$PROPDMGEXP <- as.numeric(df$PROPDMGEXP)
+df$PROPDMGEXP[is.na(df$PROPDMGEXP)] = 0
+
+df$CROPDMGEXP <- as.character(df$CROPDMGEXP)
+df$CROPDMGEXP = gsub("\\-|\\+|\\?|h|H|0","0",df$CROPDMGEXP)
+df$CROPDMGEXP = gsub("k|K", "1000", df$CROPDMGEXP)
+df$CROPDMGEXP = gsub("m|M", "1000000", df$CROPDMGEXP)
+df$CROPDMGEXP = gsub("b|B", "1000000000", df$CROPDMGEXP)
+df$CROPDMGEXP <- as.numeric(df$CROPDMGEXP)
+df$CROPDMGEXP[is.na(df$CROPDMGEXP)] = 0
+
+df$PROPDMG_TOTAL <- df$PROPDMG * df$PROPDMGEXP
+df$CROPDMG_TOTAL <- df$CROPDMG * df$CROPDMGEXP
+
+
+
+# Aggregating and selecting top 10
 # ----- Health and injuries-----
 df.fatalities.bytype <- aggregate(df[, 'FATALITIES'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
 df.injuries.bytype <- aggregate(df[, 'INJURIES'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
-names(df.fatalities.bytype) <- c("EVTYPE","HEALTH")
-names(df.injuries.bytype) <- c("EVTYPE","HEALTH")
-df.fatalities.bytype.10 <- head(arrange(df.fatalities.bytype[which(df.fatalities.bytype$HEALTH >0),], desc(HEALTH)),10)
-df.injuries.bytype.10   <- head(arrange(df.injuries.bytype[which(df.injuries.bytype$HEALTH >0),], desc(HEALTH)),10) 
+names(df.fatalities.bytype) <- c("EVTYPE","VALUE")
+names(df.injuries.bytype) <- c("EVTYPE","VALUE")
+df.fatalities.bytype.10 <- head(arrange(df.fatalities.bytype[which(df.fatalities.bytype$VALUE >0),], desc(VALUE)),10)
+df.injuries.bytype.10   <- head(arrange(df.injuries.bytype[which(df.injuries.bytype$VALUE >0),], desc(VALUE)),10) 
 
 # ---- Property and crop damage
-df.property.bytype <- aggregate(df[, 'PROPDMG'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
-df.crop.bytype <- aggregate(df[, 'CROPDMG'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
-names(df.property.bytype) <- c("EVTYPE","HEALTH")
-names(df.crop.bytype) <- c("EVTYPE","HEALTH")
-df.property.bytype.10 <- head(arrange(df.property.bytype[which(df.property.bytype$HEALTH >0),], desc(HEALTH)),10) 
-df.crop.bytype.10     <- head(arrange(df.crop.bytype[which(df.crop.bytype$HEALTH >0),], desc(HEALTH)),10) 
+df.property.bytype <- aggregate(df[, 'PROPDMG_TOTAL'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
+df.crop.bytype <- aggregate(df[, 'CROPDMG_TOTAL'], by=list(df$EVTYPE), FUN=sum, na.rm=TRUE)
+names(df.property.bytype) <- c("EVTYPE","VALUE")
+names(df.crop.bytype) <- c("EVTYPE","VALUE")
+df.property.bytype.10 <- head(arrange(df.property.bytype[which(df.property.bytype$VALUE >0),], desc(VALUE)),10) 
+df.crop.bytype.10     <- head(arrange(df.crop.bytype[which(df.crop.bytype$VALUE >0),], desc(VALUE)),10) 
 
 ```
 
 ## Results
 
 ```{r, fig.width=10, fig.height=6}
-# Load libraries
+# Load more libraries
 library(ggplot2)
 library(gridExtra) 
 
 ### -- Reorder data frames for better visual effect
-df.fatalities.bytype.10 <- transform(df.fatalities.bytype.10, EVTYPE = reorder(EVTYPE, order(HEALTH, decreasing = TRUE)))
-df.injuries.bytype.10 <- transform(df.injuries.bytype.10, EVTYPE = reorder(EVTYPE, order(HEALTH, decreasing = TRUE)))
+df.fatalities.bytype.10 <- transform(df.fatalities.bytype.10, EVTYPE = reorder(EVTYPE, order(VALUE, decreasing = TRUE)))
+df.injuries.bytype.10 <- transform(df.injuries.bytype.10, EVTYPE = reorder(EVTYPE, order(VALUE, decreasing = TRUE)))
 
-df.property.bytype.10 <- transform(df.property.bytype.10, EVTYPE = reorder(EVTYPE, order(HEALTH, decreasing = TRUE)))
-df.crop.bytype.10 <- transform(df.crop.bytype.10, EVTYPE = reorder(EVTYPE, order(HEALTH, decreasing = TRUE)))
+df.property.bytype.10 <- transform(df.property.bytype.10, EVTYPE = reorder(EVTYPE, order(VALUE, decreasing = TRUE)))
+df.crop.bytype.10 <- transform(df.crop.bytype.10, EVTYPE = reorder(EVTYPE, order(VALUE, decreasing = TRUE)))
 
 ###-------Build barplots-------
 # Fatalities and injuries by event
-fp <- ggplot(data = df.fatalities.bytype.10, aes(x=EVTYPE, y=HEALTH), geom = "bar", binwidth = 1, colour="blue") + 
+fp <- ggplot(data = df.fatalities.bytype.10, aes(x=EVTYPE, y=VALUE), geom = "bar", binwidth = 1, colour="blue") + 
         scale_y_continuous("Fatalities") + 
         geom_bar(colour="blue", stat="identity", fill="blue") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1)) + xlab("Weather Type") + 
-        ggtitle("Top 10 causes of death\n in the U.S. from 1995 to 2011")
-ip <- ggplot(data = df.injuries.bytype.10, aes(x=EVTYPE, y=HEALTH), geom = "bar", binwidth = 1, colour="blue") + 
+        ggtitle("Top 10 causes of death\n in the U.S. from 1980 to 2011")
+ip <- ggplot(data = df.injuries.bytype.10, aes(x=EVTYPE, y=VALUE), geom = "bar", binwidth = 1, colour="blue") + 
         scale_y_continuous("Injuries") + 
         geom_bar(colour="blue", stat="identity", fill="blue") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1)) + xlab("Weather Type") + 
-        ggtitle("Top 10 causes of injuries\n in the U.S. from 1995 to 2011")
+        ggtitle("Top 10 causes of injuries\n in the U.S. from 1980 to 2011")
 grid.arrange(fp, ip, ncol = 2, main="Fatalities and injuries by Event")
 
 ###--------------
 # Property and crop damage by event
-pp <- ggplot(data = df.property.bytype.10, aes(x=EVTYPE, y=HEALTH), geom = "bar", binwidth = 1, colour="blue") + 
+pp <- ggplot(data = df.property.bytype.10, aes(x=EVTYPE, y=VALUE), geom = "bar", binwidth = 1, colour="blue") + 
         scale_y_continuous("Property Damage") + 
         geom_bar(colour="blue", stat="identity", fill="blue") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1)) + xlab("Weather Type") + 
-        ggtitle("Top 10 causes of\nproperty damage\n in the U.S. from 1995 to 2011")
-cp <- ggplot(data = df.crop.bytype.10, aes(x=EVTYPE, y=HEALTH), geom = "bar", binwidth = 1, colour="blue") + 
+        ggtitle("Top 10 causes of\nproperty damage\n in the U.S. from 1980 to 2011")
+cp <- ggplot(data = df.crop.bytype.10, aes(x=EVTYPE, y=VALUE), geom = "bar", binwidth = 1, colour="blue") + 
         scale_y_continuous("Crop Damage") + 
         geom_bar(colour="blue", stat="identity", fill="blue") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1)) + xlab("Weather Type") + 
-        ggtitle("Top 10 causes of\ncrop damage\n in the U.S. from 1995 to 2011")
+        ggtitle("Top 10 causes of\ncrop damage\n in the U.S. from 1980 to 2011")
 grid.arrange(pp, cp, ncol = 2, main="Property and Crop Damage by Event")
 ```
 
 ## Conclusion
 
 1. As can be seen on the health related plots tornadoes have the most significant impact on the public health in terms of injuries and fatalities. Excessive heat is the 2nd leading cause of fatalities caused by severe weather events. Thunderstorm wind is the 2nd leading cause for injuries. 
-2. Tornadoes are also the leading cause of property damage followed by flash floods and storm surges. Leading cause of damage to crops are hail and flash floods.
+2. Floods are the leading cause of property damage followed by hurracanes/typhoons. Leading causes of crop damage are drought and floods.
 
 
 ### Used libraries and System Info
